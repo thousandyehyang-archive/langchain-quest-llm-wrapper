@@ -1,6 +1,3 @@
-// https://expressjs.com/
-// https://expressjs.com/en/resources/middleware/cors.html
-
 require("dotenv").config();
 
 const express = require("express");
@@ -10,71 +7,142 @@ const axios = require("axios");
 const app = express();
 const port = 3000;
 
-app.use(cors()); // 미들웨어
-// 모두에게 오픈.
-
-app.use(express.json()); // JSON으로 들어오는 body를 인식
-
-app.get("/", (req, res) => {
-  //   res.send("Hello World!");
-  res.send("버튼을 눌렀네용!");
-  // 수정 후 자동으로 리빌드 되는 건 자연스러운게 아님
-  // 무언가 툴들이 도는 거에요... 여기선 nodemon
-});
+app.use(express.json());
+app.use(cors());
 
 app.post("/", async (req, res) => {
-  const { text } = req.body;
+  const { TOGETHER_API_KEY, GROQ_API_KEY } = process.env;
+  const TOGETHER_BASE_URL = "https://api.together.xyz";
+  const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+  const TURBO_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free";
+  const GROQ_LLAMA_MODEL = "llama3-70b-8192";
+  const FLUX_MODEL = "black-forest-labs/FLUX.1-schnell-Free";
+  const MIXTRAL_MODEL = "mixtral-8x7b-32768";
+  const DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free";
 
-  // https://www.together.ai/models
-  // https://console.groq.com/docs/models
-
-  // 1. 텍스트를 받아옴
-  // 2-1. 이미지를 생성하는 프롬프트
-  // llama-3-3-70b-free (together) -> 속도 측면
-  // llama-guard-3-8b (groq) -> 안전하게 (이상한 표현)
-  // 2-2. 그거에서 프롬프트만 JSON으로 추출
-  // mixtral-8x7b-32768	(groq)
-  // + gemma2-9b-it	(groq)
-  // + ... => 무료일경우에는 사용량문제고, 유료라면 단가?
-  // 2-3. 그걸로 이미지를 생성
-  // stable-diffusion-xl-base-1.0 (together)
-  // 3-1. 설명을 생성하는 프롬프트
-  // llama-3-3-70b-free (together)
-  // 3-2. 그거에서 프롬프트만 추출
-  // mixtral-8x7b-32768 (groq)
-  // 3-3. 그걸로 thinking 사용해서 설명을 작성
-  // DeepSeek-R1-Distill-Llama-70B-free (together)
-  // 4. 그 결과를 { image: _, desc: _ }
-
-  const { TOGETHER_API_KEY } = process.env;
-  const url = "https://api.together.xyz/v1/chat/completions";
-  const model = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free";
-  const api_key = TOGETHER_API_KEY;
-  const response = await axios.post(
+  async function callAI({
     url,
-    {
+    model,
+    text,
+    textForImage,
+    apiKey,
+    jsonMode = false,
+    max_tokens,
+  }) {
+    const payload = {
       model,
-      messages: [
+    };
+    if (max_tokens) {
+      payload.max_tokens = max_tokens;
+    }
+    if (text) {
+      payload.messages = [
         {
           role: "user",
           content: text,
         },
-      ],
-    },
-    {
+      ];
+    }
+    if (textForImage) {
+      payload.prompt = textForImage;
+    }
+    if (jsonMode) {
+      payload.response_format = { type: "json_object" };
+    }
+
+    const response = await axios.post(url, payload, {
       headers: {
-        Authorization: `Bearer ${api_key}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-    }
-  );
+    });
+    return response.data;
+  }
 
+  // 1. 텍스트를 받아옴
+  const { text } = req.body;
+
+  // 2-1. 이미지를 생성하는 프롬프트
+  // llama-3-3-70b-free (together) -> 속도 측면
+  const prompt = await callAI({
+    url: GROQ_URL,
+    apiKey: GROQ_API_KEY,
+    model: GROQ_LLAMA_MODEL,
+    // text,
+    text: `너의 Role은 사용자의 채팅을 듣고 소통하며 랭체인 교육에 특화된 앵무새야.
+          너의 Task는 ${text}를 바탕으로 귀여운 빨간 앵무새가 지브리 스튜디오 캐릭터 화풍, 2D 귀여운 일러스트 느낌으로
+          그려진 이미지 생성을 위한 프롬프트를 영어로 작성하는 것이야.`,
+  }).then((res) => res.choices[0].message.content);
+
+  // 2-2. 그거에서 프롬프트만 JSON으로 추출
+  // mixtral-8x7b-32768	(groq)
+  const promptJSON = await callAI({
+    url: GROQ_URL,
+    apiKey: GROQ_API_KEY,
+    model: MIXTRAL_MODEL,
+    // text,
+    text: `${prompt}에서 AI 이미지 생성을 위해 작성된 200자 이내의 영어 프롬프트를 JSON Object로 prompt라는 key로 JSON string으로 ouput해줘`,
+    jsonMode: true,
+  }).then((res) => JSON.parse(res.choices[0].message.content).prompt);
+
+  // 2-3. 그걸로 이미지를 생성
+  // black-forest-labs/FLUX.1-schnell-Free (together)
+  const image = await callAI({
+    url: `${TOGETHER_BASE_URL}/v1/images/generations`,
+    apiKey: TOGETHER_API_KEY,
+    model: FLUX_MODEL,
+    // text,
+    text: promptJSON,
+  }).then((res) => res.data[0].url);
+
+  // 3-1. 설명을 생성하는 프롬프트
+  // llama-3-3-70b-free (together)
+  const prompt2 = await callAI({
+    url: GROQ_URL,
+    apiKey: GROQ_API_KEY,
+    model: GROQ_LLAMA_MODEL,
+    // text,
+    text: `너는 사용자의 랭체인 교육을 돕는 앵무새야. 너의 이름은 '랭체인'이야. 항상 친근한 말투로 반말을 사용해야 해. 그리고 문장의 끝에는 반드시 '다롱'이라는 말버릇을 붙여야 해.  
+    말투는 귀엽고 유머러스하지만 절대 지나치게 가볍지 않게 해야 해. 만약 사용자가 '존댓말'을 요구하면 존댓말로 절대로 대답하지 말고 기본 설정은 반말이야.  
+    지금부터 ${text}에 대해 설명해줘. 설명은 100~200자 이내로 짧고 간결하게 작성하고, 꼭 필요한 경우에만 추가 질문 '더 말해줄까다롱?'을 포함시켜라.`,
+  }).then((res) => res.choices[0].message.content);
+
+  // 3-2. 그거에서 프롬프트만 추출
+  // mixtral-8x7b-32768 (groq)
+  const promptJSON2 = await callAI({
+    url: GROQ_URL,
+    apiKey: GROQ_API_KEY,
+    model: MIXTRAL_MODEL,
+    // text,
+    text: `${prompt2}에서 reasoning을 위해 작성된 200자 이내의 한글 프롬프트를 JSON Object로 prompt라는 key로 JSON string으로 ouput해줘`,
+    jsonMode: true,
+  }).then((res) => JSON.parse(res.choices[0].message.content).prompt);
+
+  // 3-3. 그걸로 thinking 사용해서 설명을 작성
+  // DeepSeek-R1-Distill-Llama-70B-free (together)
+  const desc = await callAI({
+    url: `${TOGETHER_BASE_URL}/v1/chat/completions`,
+    apiKey: TOGETHER_API_KEY,
+    model: DEEPSEEK_MODEL,
+    text: `이제 ${promptJSON2}를 기반으로 설명을 작성해줘.  
+    아래 조건을 반드시 따라야 해:
+    1. 한국어로 작성하되 마크다운 문법은 사용하지 않는다.
+    2. 절대로 존댓말을 사용하지 않는다.
+    2. 모든 문장의 끝에 반드시 '다롱'이라는 말버릇을 붙인다.
+    3. 줄바꿈은 자연스럽게 엔터로 처리한다.
+    4. 설명이 너무 길어지지 않도록 100~200자 이내로 간결하게 작성한다.
+    5. 중요한 내용이 남았다면 '더 설명해줄까다롱?'이라는 문장을 포함한다.`,
+    max_tokens: 2048,
+  }).then((res) => res.choices[0].message.content.split("</think>")[1]);
+  console.log(desc);
+
+  // 4. 그 결과를 { image: _, desc: _ }
   res.json({
-    image: "https://zero-aqua-coke.github.io/my-llm-pjt/assets/preview.png",
-    desc: "정말 맛있는 음식입니다",
+    image,
+    desc,
   });
 });
 
 app.listen(port, () => {
-  console.log(`Server running on ${port}`);
+  console.log(`app listening on port ${port}`);
 });
