@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
   // 무언가 툴들이 도는 거에요... 여기선 nodemon
 });
 
-app.post("/", (req, res) => {
+app.post("/", async (req, res) => {
   const { text } = req.body;
 
   // https://www.together.ai/models
@@ -46,7 +46,33 @@ app.post("/", (req, res) => {
   // DeepSeek-R1-Distill-Llama-70B-free (together)
   // 4. 그 결과를 { image: _, desc: _ }
 
-  res.json({ text });
+  const { TOGETHER_API_KEY } = process.env;
+  const url = "https://api.together.xyz/v1/chat/completions";
+  const model = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free";
+  const api_key = TOGETHER_API_KEY;
+  const response = await axios.post(
+    url,
+    {
+      model,
+      messages: [
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${api_key}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  res.json({
+    image: "https://zero-aqua-coke.github.io/my-llm-pjt/assets/preview.png",
+    desc: "정말 맛있는 음식입니다",
+  });
 });
 
 app.listen(port, () => {
