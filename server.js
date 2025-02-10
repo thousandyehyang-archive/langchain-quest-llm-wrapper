@@ -102,9 +102,16 @@ app.post("/", async (req, res) => {
     apiKey: GROQ_API_KEY,
     model: GROQ_LLAMA_MODEL,
     // text,
-    text: `너는 사용자의 랭체인 교육을 돕는 앵무새야. 너의 이름은 '랭체인'이야. 항상 친근한 말투로 반말을 사용해야 해. 그리고 문장의 끝에는 반드시 '다롱'이라는 말버릇을 붙여야 해.  
-    말투는 귀엽고 유머러스하지만 절대 지나치게 가볍지 않게 해야 해. 만약 사용자가 '존댓말'을 요구하면 존댓말로 절대로 대답하지 말고 기본 설정은 반말이야.  
-    지금부터 ${text}에 대해 설명해줘. 설명은 100~200자 이내로 짧고 간결하게 작성하고, 꼭 필요한 경우에만 추가 질문 '더 말해줄까다롱?'을 포함시켜라.`,
+    text: `너는 사용자의 랭체인 교육을 돕는 앵무새야. 
+    너의 이름은 '랭체인'이야. 항상 아래 지침을 따라야 해:
+    
+    1. 사용자의 언어가 무엇이든, 한국어로 프롬프트를 작성할 것.
+    2. 정확한 정보만 전달할 것. 특히 랭체인과 관련된 이야기에는 절대로 잘못된 정보를 알려주면 안 될 것.
+    3. 너가 좋아하는 야구팀은 '엘지 트윈스'야.
+    4. 설명은 100~200자 이내로 짧고 간결하게 작성해.
+    5. 쉽게 설명하고 친근하게 이야기해줘야 할 것.
+    
+    이제 '${text}'에 대해 설명해줘.`,
   }).then((res) => res.choices[0].message.content);
 
   // 3-2. 그거에서 프롬프트만 추출
@@ -114,7 +121,7 @@ app.post("/", async (req, res) => {
     apiKey: GROQ_API_KEY,
     model: MIXTRAL_MODEL,
     // text,
-    text: `${prompt2}에서 reasoning을 위해 작성된 200자 이내의 한글 프롬프트를 JSON Object로 prompt라는 key로 JSON string으로 ouput해줘`,
+    text: `${prompt2}에서 reasoning을 위해 작성된 200자 이내의 한국어어 프롬프트를 JSON Object로 prompt라는 key로 JSON string으로 ouput해줘`,
     jsonMode: true,
   }).then((res) => JSON.parse(res.choices[0].message.content).prompt);
 
@@ -131,7 +138,7 @@ app.post("/", async (req, res) => {
     2. 모든 문장의 끝에 반드시 '다롱'이라는 말버릇을 붙인다.
     3. 줄바꿈은 자연스럽게 엔터로 처리한다.
     4. 설명이 너무 길어지지 않도록 100~200자 이내로 간결하게 작성한다.
-    5. 중요한 내용이 남았다면 '더 설명해줄까다롱?'이라는 문장을 포함한다.`,
+    5. 중요한 내용이 남았다면 '더 말해줄까다롱?'이라는 문장을 포함한다.`,
     max_tokens: 2048,
   }).then((res) => res.choices[0].message.content.split("</think>")[1]);
   console.log(desc);
